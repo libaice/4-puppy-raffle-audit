@@ -72,6 +72,8 @@ contract PuppyRaffle is ERC721, Ownable {
         rarityToName[LEGENDARY_RARITY] = LEGENDARY;
     }
 
+    //@audit enterRaffle  DOS attack
+    
     /// @notice this is how players enter the raffle
     /// @notice they have to pay the entrance fee * the number of players
     /// @notice duplicate entrants are not allowed
@@ -83,6 +85,7 @@ contract PuppyRaffle is ERC721, Ownable {
         }
 
         // Check for duplicates
+        // @audit  double looping mechanism, gas cost is high
         for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
@@ -94,12 +97,17 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @param playerIndex the index of the player to refund. You can find it externally by calling `getActivePlayerIndex`
     /// @dev This function will allow there to be blank spots in the array
     function refund(uint256 playerIndex) public {
+
+        //@audit MEV attack
         address playerAddress = players[playerIndex];
         require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
         require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
 
+        //@audit use openzeppelin Address.sol sendValue() method
         payable(msg.sender).sendValue(entranceFee);
 
+        // @audit  set address(0) to delete the player
+        //@audit-note Note: Resetting to zero essentially deletes that player entry, signaling they're either refunded or not active.
         players[playerIndex] = address(0);
         emit RaffleRefunded(playerAddress);
     }
@@ -107,6 +115,8 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice a way to get the index in the array
     /// @param player the address of a player in the raffle
     /// @return the index of the player in the array, if they are not active, it returns 0
+
+    // @audit the getActivePlayer function returns default value 0, which is not a good design
     function getActivePlayerIndex(address player) external view returns (uint256) {
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == player) {
@@ -153,6 +163,7 @@ contract PuppyRaffle is ERC721, Ownable {
         _safeMint(winner, tokenId);
     }
 
+    //@audit 没有owner 管理员的限制
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
